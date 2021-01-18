@@ -22,6 +22,9 @@ import java.util.Iterator;
 
 final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
 
+    /**
+     * keys数组，默认1024
+     */
     SelectionKey[] keys;
     int size;
 
@@ -37,6 +40,7 @@ final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
 
         keys[size++] = o;
         if (size == keys.length) {
+            // 扩容，2倍扩容
             increaseCapacity();
         }
 
