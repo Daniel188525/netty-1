@@ -135,6 +135,11 @@ public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor im
 
     @Override
     protected void afterRunningAllTasks() {
+        // 执行任务队列 tailTasks 的任务
+        /**
+         * TODO 到底什么样的任务适合加入到tailTasks中呢？
+         * 批量提交写入功能
+         */
         runAllTasksFrom(tailTasks);
     }
 

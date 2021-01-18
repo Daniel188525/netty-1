@@ -27,24 +27,59 @@ import java.util.concurrent.atomic.AtomicLong;
 
 @SuppressWarnings("ComparableImplementedButEqualsNotOverridden")
 final class ScheduledFutureTask<V> extends PromiseTask<V> implements ScheduledFuture<V>, PriorityQueueNode {
+    /**
+     * 任务序号生成器，通过 AtomicLong 实现递增发号
+     */
     private static final AtomicLong nextTaskId = new AtomicLong();
+
+    /**
+     * 定时任务时间起点
+     * 注意： 在 ScheduledFutureTask 中，定时任务的执行时间，都是基于 START_TIME 做相对时间
+     * 原因可能是： 1.由于存储的是相对时间，即使我修改了系统时间也不影响我任务的正常执行
+     */
     private static final long START_TIME = System.nanoTime();
 
+    /**
+     * 获取当前时间，这个是相对 START_TIME 来算的
+     * @return
+     */
     static long nanoTime() {
         return System.nanoTime() - START_TIME;
     }
 
+    /**
+     * 获得任务执行时间，这个也是相对 START_TIME 来算的，单位是纳秒
+     * @param delay
+     * @return
+     */
     static long deadlineNanos(long delay) {
         long deadlineNanos = nanoTime() + delay;
         // Guard against overflow
         return deadlineNanos < 0 ? Long.MAX_VALUE : deadlineNanos;
     }
 
+    /**
+     * 任务编号
+     */
     private final long id = nextTaskId.getAndIncrement();
+
+    /**
+     * 任务执行时间，即到了该时间，该任务就会被执行
+     */
     private long deadlineNanos;
+
+    /**
+     * 任务执行周期
+     * 等于0：只执行一次
+     * 大于0：按照计划执行时间计算
+     * 小于0：按照实际执行时间计算
+     */
     /* 0 - no repeat, >0 - repeat at fixed rate, <0 - repeat with fixed delay */
     private final long periodNanos;
 
+    /**
+     * 队列编号
+     */
     private int queueIndex = INDEX_NOT_IN_QUEUE;
 
     ScheduledFutureTask(
@@ -84,10 +119,19 @@ final class ScheduledFutureTask<V> extends PromiseTask<V> implements ScheduledFu
         return deadlineNanos;
     }
 
+    /**
+     * 距离当前时间，还要多久可执行。若为负数，直接返回 0
+     * @return
+     */
     public long delayNanos() {
         return Math.max(0, deadlineNanos() - nanoTime());
     }
 
+    /**
+     * 距离指定时间，还要多久可执行。若为负数，直接返回 0
+     * @param currentTimeNanos
+     * @return
+     */
     public long delayNanos(long currentTimeNanos) {
         return Math.max(0, deadlineNanos() - (currentTimeNanos - START_TIME));
     }
@@ -122,12 +166,15 @@ final class ScheduledFutureTask<V> extends PromiseTask<V> implements ScheduledFu
     public void run() {
         assert executor().inEventLoop();
         try {
+            // 只执行一次的定时任务
             if (periodNanos == 0) {
                 if (setUncancellableInternal()) {
                     V result = task.call();
+                    // 回调通知注册在定时任务上的监听器
                     setSuccessInternal(result);
                 }
-            } else {
+            }
+            else {
                 // check if is done as it may was cancelled
                 if (!isCancelled()) {
                     task.call();
