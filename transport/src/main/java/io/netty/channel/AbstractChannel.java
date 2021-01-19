@@ -457,21 +457,28 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
         @Override
         public final void register(EventLoop eventLoop, final ChannelPromise promise) {
+            // 非空校验
             if (eventLoop == null) {
                 throw new NullPointerException("eventLoop");
             }
+            // 不能重复注册
             if (isRegistered()) {
                 promise.setFailure(new IllegalStateException("registered to an event loop already"));
                 return;
             }
+            // 检查 Channel 与 EventLoop 是否匹配
             if (!isCompatible(eventLoop)) {
                 promise.setFailure(
                         new IllegalStateException("incompatible event loop type: " + eventLoop.getClass().getName()));
                 return;
             }
-
+            // Channel 的 eventLoop 设置
+            // 注意： 一个 Channel 只能绑定唯一一个 EventLoop，但是一个 EventLoop 可以分配给多个 Channel
+            // Channel : EventLoop = 1 : N， 一对多的关系
+            // 从这里可以看到 Channel 的处理是线程安全的，因为只有一个线程在处理
             AbstractChannel.this.eventLoop = eventLoop;
 
+            // 当前线程是否是 EventLoop 线程
             if (eventLoop.inEventLoop()) {
                 register0(promise);
             } else {
@@ -493,6 +500,10 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
         }
 
+        /**
+         * 注册 Channel 到 EventLoop 上
+         * @param promise
+         */
         private void register0(ChannelPromise promise) {
             try {
                 // check if the channel is still open as it could be closed in the mean time when the register
@@ -500,16 +511,26 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 if (!promise.setUncancellable() || !ensureOpen(promise)) {
                     return;
                 }
+                // 记录是否为首次注册
                 boolean firstRegistration = neverRegistered;
+
+                // 执行注册操作
                 doRegister();
+
+                // 标记为已注册
                 neverRegistered = false;
                 registered = true;
 
                 // Ensure we call handlerAdded(...) before we actually notify the promise. This is needed as the
                 // user may already fire events through the pipeline in the ChannelFutureListener.
+                // 官方解释：注册后回调通知之前，完成 handler add 操作
                 pipeline.invokeHandlerAddedIfNeeded();
 
+                // 回调通知 promise 执行成功
+                // 我们向 channelFuture 注册的 ChannelFutureListener ，就会被立即回调执行
                 safeSetSuccess(promise);
+
+                // 触发通知已注册事件
                 pipeline.fireChannelRegistered();
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
                 // multiple channel actives if the channel is deregistered and re-registered.

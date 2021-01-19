@@ -81,10 +81,16 @@ public abstract class AbstractNioChannel extends AbstractChannel {
      * @param readInterestOp    the ops to set to receive data from the {@link SelectableChannel}
      */
     protected AbstractNioChannel(Channel parent, SelectableChannel ch, int readInterestOp) {
+        /**
+         * 初始化 id、unsafe、pipeline
+         * unsafe: IO的具体操作
+         * pipeline: 创建 DefaultChannelPipeline，headContext --> tailContext
+         */
         super(parent);
         this.ch = ch;
         this.readInterestOp = readInterestOp;
         try {
+            // 非阻塞
             ch.configureBlocking(false);
         } catch (IOException e) {
             try {
@@ -383,6 +389,10 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         boolean selected = false;
         for (;;) {
             try {
+                // 调用 Java NIO 原生 Channel SelectableChannel#register(Selector sel, int ops, Object att) 方法，
+                // 注册 Java 原生 NIO 的 Channel 对象到 Selector 对象上
+                // 监听操作位 OPS： 0 [我们初始化创建 NioServerSocketChannel 时，设置的监听操作位是：SelectionKey.OP_ACCEPT]
+                // 后续可以通过API SelectionKey.interestOps(int ops) 进行动态的修改感兴趣的操作位
                 selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
                 return;
             } catch (CancelledKeyException e) {

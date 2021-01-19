@@ -44,8 +44,19 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(ServerBootstrap.class);
 
+    /**
+     * 子 Channel 的可选项集合
+     */
     private final Map<ChannelOption<?>, Object> childOptions = new LinkedHashMap<ChannelOption<?>, Object>();
+
+    /**
+     * 子 Channel 的属性集合
+     */
     private final Map<AttributeKey<?>, Object> childAttrs = new LinkedHashMap<AttributeKey<?>, Object>();
+
+    /**
+     * 启动类配置对象
+     */
     private final ServerBootstrapConfig config = new ServerBootstrapConfig(this);
     private volatile EventLoopGroup childGroup;
     private volatile ChannelHandler childHandler;
@@ -137,6 +148,11 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         return this;
     }
 
+    /**
+     * 初始化 Channel 配置
+     * @param channel
+     * @throws Exception
+     */
     @Override
     void init(Channel channel) throws Exception {
         final Map<ChannelOption<?>, Object> options = options0();
@@ -166,6 +182,9 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
             currentChildAttrs = childAttrs.entrySet().toArray(newAttrArray(0));
         }
 
+        // 添加 ChannelInitializer 对象到 pipeline 中，用于后续初始化 ChannelHandler 到 pipeline 中。
+        // 此时 pipeline 中 形成的链是： headContext --> ChannelInitializer --> tailContext
+        // 后续会在注册 Channel 到 EventLoop 后，通过 pipeline.invokeHandlerAddedIfNeeded(); 触发
         p.addLast(new ChannelInitializer<Channel>() {
             @Override
             public void initChannel(final Channel ch) throws Exception {
@@ -178,6 +197,11 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
                 ch.eventLoop().execute(new Runnable() {
                     @Override
                     public void run() {
+                        // ServerBootstrapAcceptor：用于接受客户端的连接请求
+                        // 一旦EventLoop内部的Selector检测到NioServerSocketChannel有新的连接到来的事件，
+                        // 则会交给NioServerSocketChannel的ChannelPipeline来处理，即会交由ServerBootstrapAcceptor来处理
+                        // 作用1：为新的Channel的ChannelPipeline配置我们上述代码中的childHandler指定的ChannelHandlers
+                        // 作用2：将新的Channel注册到了上述EventLoopGroup workerGroup中： 使用选择策略接口
                         pipeline.addLast(new ServerBootstrapAcceptor(
                                 ch, currentChildGroup, currentChildHandler, currentChildOptions, currentChildAttrs));
                     }
@@ -243,15 +267,20 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
             final Channel child = (Channel) msg;
 
+            // 为新的 Channel 的 ChannelPipeline 配置我们代码中的 childHandler 方法指定的 ChannelHandlers
             child.pipeline().addLast(childHandler);
 
+            // 设置 Channel Options
             setChannelOptions(child, childOptions, logger);
 
+            // 设置 Channel Attrs
             for (Entry<AttributeKey<?>, Object> e: childAttrs) {
                 child.attr((AttributeKey<Object>) e.getKey()).set(e.getValue());
             }
 
             try {
+                // 将新的 Channel 注册到启动时设置的 EventLoopGroup workerGroup中，使用选择策略接口
+                // 并向 channelFuture 中添加回调通知：operationComplete
                 childGroup.register(child).addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture future) throws Exception {

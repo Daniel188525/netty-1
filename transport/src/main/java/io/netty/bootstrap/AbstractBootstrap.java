@@ -279,6 +279,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
+        // 1. 初始化 Channel 并注册 Channel 到 EventLoopGroup 中
         final ChannelFuture regFuture = initAndRegister();
         final Channel channel = regFuture.channel();
         if (regFuture.cause() != null) {
@@ -317,7 +318,16 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     final ChannelFuture initAndRegister() {
         Channel channel = null;
         try {
+            // 1. 反射创建 Channel 并初始化
             channel = channelFactory.newChannel();
+            // 初始化 channel 中的各种属性：options、attrs、eventLoopGroup、handlers等。
+            // 在这里会向 channelPipeline 中添加一个自定义的 ChannelInitializer 实例。
+            // 该 ChannelInitializer 实例的 initChannel 方法会在 channel registered 后通过 pipeLine.fireChannelRegistered 方法触发调用，
+            // 调用后会向 pipeline.addLast(new ServerBootstrapAcceptor) 添加 ServerBootstrapAcceptor handler，然后从 pipeLine 中移除该 ChannelInitializer 实例。
+            // ServerBootstrapAcceptor 的作用：一旦EventLoop内部的Selector检测到NioServerSocketChannel有新的连接到来的事件，
+            // 则会交给NioServerSocketChannel的ChannelPipeline来处理，即会交由ServerBootstrapAcceptor来处理。
+            // 作用1：为新的 Channel 的 ChannelPipeline 配置我们上述代码中的 childHandler 指定的 ChannelHandlers
+            // 作用2：将新的 Channel 注册到上述 EventLoopGroup workerGroup中： 使用选择策略接口
             init(channel);
         } catch (Throwable t) {
             if (channel != null) {
@@ -330,6 +340,9 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
 
+        // 2. 注册 Channel 到 EventLoopGroup 中
+        // SingleThreadEventLoop#register(io.netty.channel.Channel)
+        // 最终调用 AbstractChannel.AbstractUnsafe#register 完成注册操作
         ChannelFuture regFuture = config().group().register(channel);
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {
