@@ -39,34 +39,62 @@ abstract class AbstractChannelHandlerContext extends DefaultAttributeMap
         implements ChannelHandlerContext, ResourceLeakHint {
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(AbstractChannelHandlerContext.class);
+
+    /**
+     * 下一个节点
+     */
     volatile AbstractChannelHandlerContext next;
+
+    /**
+     * 上一个节点
+     */
     volatile AbstractChannelHandlerContext prev;
 
+    // 处理器状态-handlerState 原子更新器
     private static final AtomicIntegerFieldUpdater<AbstractChannelHandlerContext> HANDLER_STATE_UPDATER =
             AtomicIntegerFieldUpdater.newUpdater(AbstractChannelHandlerContext.class, "handlerState");
 
     /**
      * {@link ChannelHandler#handlerAdded(ChannelHandlerContext)} is about to be called.
      */
-    private static final int ADD_PENDING = 1;
+    private static final int ADD_PENDING = 1; // 添加准备中
     /**
      * {@link ChannelHandler#handlerAdded(ChannelHandlerContext)} was called.
      */
-    private static final int ADD_COMPLETE = 2;
+    private static final int ADD_COMPLETE = 2; // 已添加
     /**
      * {@link ChannelHandler#handlerRemoved(ChannelHandlerContext)} was called.
      */
-    private static final int REMOVE_COMPLETE = 3;
+    private static final int REMOVE_COMPLETE = 3; // 已移除
     /**
      * Neither {@link ChannelHandler#handlerAdded(ChannelHandlerContext)}
      * nor {@link ChannelHandler#handlerRemoved(ChannelHandlerContext)} was called.
      */
-    private static final int INIT = 0;
+    private static final int INIT = 0; // 初始化
 
+    /**
+     * 是否为 inbound
+     */
     private final boolean inbound;
+
+    /**
+     * 是否为 outbound
+     */
     private final boolean outbound;
+
+    /**
+     * 所属 pipeline
+     */
     private final DefaultChannelPipeline pipeline;
+
+    /**
+     * 名字
+     */
     private final String name;
+
+    /**
+     * 是否使用有序的 EventExecutor ( {@link #executor} )，即 OrderedEventExecutor
+     */
     private final boolean ordered;
 
     // Will be set to null if no child executor should be used, otherwise it will be set to the
@@ -76,11 +104,18 @@ abstract class AbstractChannelHandlerContext extends DefaultAttributeMap
 
     // Lazily instantiated tasks used to trigger events to a handler with different executor.
     // There is no need to make this volatile as at worse it will just create a few more instances then needed.
+    // 执行 Channel ReadComplete 事件的任务
     private Runnable invokeChannelReadCompleteTask;
+    // 执行 Channel Read 事件的任务
     private Runnable invokeReadTask;
+    // 执行 Channel WritableStateChanged 事件的任务
     private Runnable invokeChannelWritableStateChangedTask;
+    // 执行 flush 事件的任务
     private Runnable invokeFlushTask;
 
+    /**
+     * 处理器状态
+     */
     private volatile int handlerState = INIT;
 
     AbstractChannelHandlerContext(DefaultChannelPipeline pipeline, EventExecutor executor, String name,
@@ -88,9 +123,12 @@ abstract class AbstractChannelHandlerContext extends DefaultAttributeMap
         this.name = ObjectUtil.checkNotNull(name, "name");
         this.pipeline = pipeline;
         this.executor = executor;
+
+        // 分别是否为 Inbound、Outbound 处理器
         this.inbound = inbound;
         this.outbound = outbound;
         // Its ordered if its driven by the EventLoop or the given Executor is an instanceof OrderedEventExecutor.
+        // 如果是有序的 OrderedEventExecutor，则设置为 true
         ordered = executor == null || executor instanceof OrderedEventExecutor;
     }
 
@@ -952,10 +990,16 @@ abstract class AbstractChannelHandlerContext extends DefaultAttributeMap
         return channel().voidPromise();
     }
 
+    /**
+     * 设置 ChannelHandler 已移除
+     */
     final void setRemoved() {
         handlerState = REMOVE_COMPLETE;
     }
 
+    /**
+     * 设置 ChannelHandler 添加完成: 循环+CAS操作
+     */
     final void setAddComplete() {
         for (;;) {
             int oldState = handlerState;
@@ -968,6 +1012,9 @@ abstract class AbstractChannelHandlerContext extends DefaultAttributeMap
         }
     }
 
+    /**
+     * 设置 ChannelHandler 准备添加中
+     */
     final void setAddPending() {
         boolean updated = HANDLER_STATE_UPDATER.compareAndSet(this, INIT, ADD_PENDING);
         assert updated; // This should always be true as it MUST be called before setAddComplete() or setRemoved().

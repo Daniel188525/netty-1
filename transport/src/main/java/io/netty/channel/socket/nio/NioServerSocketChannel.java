@@ -67,8 +67,10 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
 
     /**
      * Create a new instance
+     * 默认的构造函数，在 Channel 初始化创建时，通过反射调用该方法进行创建 Channel 操作
      */
     public NioServerSocketChannel() {
+        // 先创建 Java NIO 原生 ServerSocketChannel，使用原生 SelectorProvider
         this(newSocket(DEFAULT_SELECTOR_PROVIDER));
     }
 
@@ -83,7 +85,10 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
      * Create a new instance using the given {@link ServerSocketChannel}.
      */
     public NioServerSocketChannel(ServerSocketChannel channel) {
+        // 传入 OP_ACCEPT：连接事件
+        // 初始化 channelId、unsafe、channelPipeline、感兴趣的事件码-OP_ACCEPT
         super(null, channel, SelectionKey.OP_ACCEPT);
+        // 创建 channelConfig
         config = new NioServerSocketChannelConfig(this, javaChannel().socket());
     }
 
