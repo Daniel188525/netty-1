@@ -270,7 +270,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
             // In this case we add the context to the pipeline and add a task that will call
             // ChannelHandler.handlerAdded(...) once the channel is registered.
             // 官方解释： 如果 Channel 还未注册到 EventLoop 上，则把添加的 handlerCtx 封装为 new PendingHandlerAddedTask(ctx)，
-            // 放入到 PendingHandlerCallback 尾部等待被回调
+            // 放入到 PendingHandlerCallback 尾部等待被回调。
             // 发生于 ServerBootstrap 启动的过程中。在 ServerBootstrap#init(Channel channel) 方法中，会添加 ChannelInitializer 对象到 pipeline 中，恰好此时 Channel 并未注册
             if (!registered) {
                 // 设置 AbstractChannelHandlerContext 准备添加中
@@ -1055,6 +1055,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     @Override
     public final ChannelPipeline fireChannelRead(Object msg) {
+        // 数据从head节点开始流入： HeadContext
         AbstractChannelHandlerContext.invokeChannelRead(head, msg);
         return this;
     }
@@ -1421,6 +1422,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
     }
 
+    /**
+     * 即是 Indound 又是 Outbound 还是个 HandlerContext
+     */
     final class HeadContext extends AbstractChannelHandlerContext
             implements ChannelOutboundHandler, ChannelInboundHandler {
 
@@ -1483,6 +1487,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
         @Override
         public void read(ChannelHandlerContext ctx) {
+            // AbstractUnsafe#beginRead
             unsafe.beginRead();
         }
 
@@ -1519,8 +1524,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
+            // 1. 继续传播事件
             ctx.fireChannelActive();
-
+            // 2. 继续向reactor线程注册读事件
             readIfIsAutoRead();
         }
 
@@ -1541,6 +1547,11 @@ public class DefaultChannelPipeline implements ChannelPipeline {
             readIfIsAutoRead();
         }
 
+        /**
+         * 默认情况下，Channel都是默认开启自动读取模式的，即只要Channel是active的，读完一波数据之后就继续向selector注册读事件，
+         * 这样就可以连续不断得读取数据，最终，通过pipeline，还是传递到head节点。
+         *
+         */
         private void readIfIsAutoRead() {
             if (channel.config().isAutoRead()) {
                 channel.read();

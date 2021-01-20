@@ -280,8 +280,11 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
         // 1. 初始化 Channel 并注册 Channel 到 EventLoopGroup 中
+        // 注册时会启动一个新的 Nio 线程进行[SingleThreadEventExecutor#execute(Runnable task)]，不是在 Main 线程上，所以这里使用了 ChannelFuture 进行回调
         final ChannelFuture regFuture = initAndRegister();
+
         final Channel channel = regFuture.channel();
+        // 产品异常直接返回
         if (regFuture.cause() != null) {
             return regFuture;
         }

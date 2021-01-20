@@ -478,11 +478,14 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             // 从这里可以看到 Channel 的处理是线程安全的，因为只有一个线程在处理
             AbstractChannel.this.eventLoop = eventLoop;
 
-            // 当前线程是否是 EventLoop 线程
+            // 当前线程是否是 EventLoop 线程，服务启动时一定时 Main 线程
             if (eventLoop.inEventLoop()) {
                 register0(promise);
-            } else {
+            }
+            // 当服务启动绑定端口时，该线程一定不是 NIO 线程，是主线程，所以此时走 else 部分代码
+            else {
                 try {
+                    // SingleThreadEventExecutor#execute(Runnable task)
                     eventLoop.execute(new Runnable() {
                         @Override
                         public void run() {
