@@ -809,15 +809,22 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         return isTerminated();
     }
 
+    /**
+     * 执行任务：例如，当服务启动时 Main 线程会调用该方法，执行 channel register task。
+     * @param task
+     */
     @Override
     public void execute(Runnable task) {
         if (task == null) {
             throw new NullPointerException("task");
         }
 
-        // 当前线程是否是 EventLoop 线程
+        // 当前线程是否是 Nio 线程
+        // 从源码分析来看，当服务端启动发起 channel register 操作时一定是在 Main 线程，所以此时这里返回 false
         boolean inEventLoop = inEventLoop();
+        // 添加到任务队列
         addTask(task);
+        // 非 NIO 线程时，启动一个线程
         if (!inEventLoop) {
             startThread();
             if (isShutdown() && removeTask(task)) {
